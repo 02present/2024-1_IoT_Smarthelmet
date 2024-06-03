@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
         handler = Handler(Handler.Callback { msg ->
             if (msg.what == MESSAGE_READ) {
                 val readMessage = msg.obj as String
-                speed.text = readMessage
+                processBluetoothMessage(readMessage)
             }
             true
         })
@@ -143,6 +143,13 @@ class MainActivity : AppCompatActivity() {
             } catch (e: IOException) {
                 Log.e(TAG, "Error closing socket", e)
             }
+        }
+    }
+    private fun processBluetoothMessage(message: String) {
+        // 블루투스 시리얼 값이 "bright:8"인 경우 tv_BH1750 텍스트를 8로 변경
+        if (message.startsWith("bright:")) {
+            val value = message.substringAfter("bright:").trim()
+            speed.text = value
         }
     }
     override fun onDestroy() {

@@ -28,8 +28,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:gravity="center"
-        android:orientation="horizontal">
+        android:gravity="center">
 
         <ImageView
             android:id="@+id/img_MPU9250"
@@ -68,6 +67,34 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="bright" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/mpu6050_x"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="mpu6050_x" />
+
+        <TextView
+            android:id="@+id/mpu6050_y"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="mpu6050_y" />
+
+        <TextView
+            android:id="@+id/mpu6050_z"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="mpu6050_z" />
     </LinearLayout>
 
     <Button
