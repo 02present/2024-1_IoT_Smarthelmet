@@ -97,6 +97,12 @@
             android:text="mpu6050_z" />
     </LinearLayout>
 
+    <com.google.android.gms.maps.MapView
+        android:id="@+id/mapView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
     <Button
         android:id="@+id/connectbutton"
         android:layout_width="match_parent"
