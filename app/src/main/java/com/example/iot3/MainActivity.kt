@@ -1,35 +1,30 @@
 package com.example.iot3
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothSocket
+import android.bluetooth.*
 import android.content.pm.PackageManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-//import com.example.iot3.MainActivity.ConnectedThread.Companion.MESSAGE_READ
-import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
-import java.util.UUID
+import java.util.*
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "BluetoothArduino"
     private val REQUEST_ENABLE_BT = 1
     private val REQUEST_FINE_LOCATION = 2
-    private val DEVICE_ADDRESS = "A0:78:17:76:CF:F4"//"00:00:00:00:00:00"
-    private val MY_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private val DEVICE_ADDRESS = "D8:B6:73:0B:FC:47"
+    private val HM10_UUID_SERVICE = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb")
+    private val HM10_UUID_CHARACTERISTIC = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb")
 
     private lateinit var bluetoothAdapter: BluetoothAdapter
-    private var bluetoothSocket: BluetoothSocket? = null
-    private var connectedThread: ConnectedThread? = null
+    private var bluetoothGatt: BluetoothGatt? = null
     private lateinit var handler: Handler
     private lateinit var speed: TextView
     private lateinit var bright: TextView
@@ -46,8 +41,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        speed = findViewById(R.id.tv_BH1750)
-        bright = findViewById(R.id.tv_MPU9250)
+        speed = findViewById(R.id.tv_MPU9250)
+        bright = findViewById(R.id.tv_BH1750)
         mpu6050_x = findViewById(R.id.mpu6050_x)
         mpu6050_y = findViewById(R.id.mpu6050_y)
         mpu6050_z = findViewById(R.id.mpu6050_z)
@@ -59,13 +54,12 @@ class MainActivity : AppCompatActivity() {
             finish()
             return
         }
+        connectToDevice()
 
         connectButton.setOnClickListener {
-            if (bluetoothSocket != null && bluetoothSocket?.isConnected == true) {
-                // 이미 연결된 상태일 때, 연결 해제
+            if (bluetoothGatt != null) {
                 disconnectFromDevice()
             } else {
-                // 연결되어 있지 않은 상태일 때, 장치에 연결 시도
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                     ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), REQUEST_FINE_LOCATION)
                 } else {
@@ -73,135 +67,93 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        handler = Handler(Handler.Callback { msg ->
-            if (msg.what == MESSAGE_READ) {
-                val readMessage = msg.obj as String
-                processBluetoothMessage(readMessage)
-            }
-            true
-        })
+
+        handler = Handler(Looper.getMainLooper())
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         when (requestCode) {
-            REQUEST_FINE_LOCATION -> {
-                if ((grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
+            REQUEST_ENABLE_BT -> {
+                if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
                     connectToDevice()
                 } else {
-                    Toast.makeText(this, "Location permission is required for Bluetooth connection", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Permissions are required for Bluetooth connection", Toast.LENGTH_SHORT).show()
                 }
-                return
             }
         }
     }
 
     private fun connectToDevice() {
-        // 블루투스 장치 가져오기
-        val device: BluetoothDevice = bluetoothAdapter?.getRemoteDevice(DEVICE_ADDRESS) ?: return
-
-        // 블루투스 권한 확인
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
-            // 권한이 없는 경우 권한 요청
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.BLUETOOTH_ADMIN), REQUEST_ENABLE_BT)
-        } else {
-            // 권한이 있는 경우 소켓 연결 시도
-            try {
-                bluetoothSocket = device.createRfcommSocketToServiceRecord(MY_UUID)
-                bluetoothSocket?.connect()
-                connectedThread = ConnectedThread(bluetoothSocket!!)
-                connectedThread?.start()
-                Toast.makeText(this, "Connected to device", Toast.LENGTH_SHORT).show()
-                connectButton.text = "블루투스 연결 끊기"
-            } catch (e: IOException) {
-                Log.e(TAG, "Error connecting to device", e)
-                Toast.makeText(this, "Connection failed", Toast.LENGTH_SHORT).show()
-            }
-        }
+        val device: BluetoothDevice = bluetoothAdapter.getRemoteDevice(DEVICE_ADDRESS)
+        bluetoothGatt = device.connectGatt(this, false, gattCallback)
     }
 
-    private fun disconnectFromDevice() {
-        // 연결된 BluetoothSocket이 있는지 확인하고 닫기
-        if (bluetoothSocket != null) {
-            try {
-                bluetoothSocket?.close()
-                connectedThread?.cancel()
-                Toast.makeText(this, "Disconnected from device", Toast.LENGTH_SHORT).show()
-                connectButton.text = "블루투스 연결"
-            } catch (e: IOException) {
-                Log.e(TAG, "Error disconnecting from device", e)
-                Toast.makeText(this, "Disconnection failed", Toast.LENGTH_SHORT).show()
+    private val gattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                // 연결 성공 시에는 서비스를 발견합니다.
+                gatt.discoverServices()
+                connectButton.text = "블루투스 연결 해제"
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                // 연결이 끊어졌을 때는 필요한 작업을 수행합니다.
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "Disconnected from device", Toast.LENGTH_SHORT).show()
+                    connectButton.text = "블루투스 연결"
+                }
+                // 필요한 경우 다른 작업 수행
             }
         }
-    }
 
-
-
-    private inner class ConnectedThread(private val socket: BluetoothSocket) : Thread() {
-        private val inStream: InputStream = socket.inputStream
-        private val outStream: OutputStream = socket.outputStream
-
-        override fun run() {
-            val buffer = ByteArray(1024)
-            var bytes: Int
-
-            while (true) {
-                try {
-                    bytes = inStream.read(buffer)
-                    val readMessage = String(buffer, 0, bytes)
-                    handler.obtainMessage(MESSAGE_READ, readMessage).sendToTarget()
-                } catch (e: IOException) {
-                    Log.e(TAG, "Error reading from stream", e)
-                    break
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                val characteristic = gatt.getService(HM10_UUID_SERVICE)?.getCharacteristic(HM10_UUID_CHARACTERISTIC)
+                characteristic?.let {
+                    gatt.setCharacteristicNotification(it, true)
+                    val descriptor = it.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
+                    descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                    gatt.writeDescriptor(descriptor)
                 }
             }
         }
 
-        fun write(message: String) {
-            try {
-                outStream.write(message.toByteArray())
-            } catch (e: IOException) {
-                Log.e(TAG, "Error writing to stream", e)
-            }
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            val message = characteristic.value.toString(Charsets.UTF_8)
+            processBluetoothMessage(message)
         }
+    }
 
-        fun cancel() {
-            try {
-                socket.close()
-            } catch (e: IOException) {
-                Log.e(TAG, "Error closing socket", e)
+    private fun disconnectFromDevice() {
+        bluetoothGatt?.disconnect()
+    }
+
+    private fun processBluetoothMessage(message: String) {
+        val parts = message.split(" ") // 문자열을 공백을 기준으로 분할하여 부분으로 나눔
+
+        for (part in parts) {
+            val keyValue = part.split(":") // 부분을 ":"를 기준으로 분할하여 키와 값으로 나눔
+            if (keyValue.size == 2) {
+                val key = keyValue[0]
+                val value = keyValue[1]
+
+                when (key) {
+                    "speed" -> speed.text = value
+                    "bright" -> bright.text = value
+                    "ax" -> mpu6050_x.text = value
+                    "ay" -> mpu6050_y.text = value
+                    "az" -> mpu6050_z.text = value
+                    // 다른 키에 대한 처리를 여기에 추가할 수 있음
+                }
             }
         }
+        Toast.makeText(this@MainActivity, "Received: $parts", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "$message")
     }
-    private fun processBluetoothMessage(message: String) {
-        // 블루투스 시리얼 값이 "bright:8"인 경우 tv_BH1750 텍스트를 8로 변경
-        if (message.startsWith("bright:")) {
-            val value = message.substringAfter("bright:").trim()
-            bright.text = value
-        }
-        if (message.startsWith("ax:")) {
-            val value = message.substringAfter("ax:").trim()
-            mpu6050_x.text = value
-        }
-        if (message.startsWith("ay:")) {
-            val value = message.substringAfter("ay:").trim()
-            mpu6050_y.text = value
-        }
-        if (message.startsWith("az:")) {
-            val value = message.substringAfter("az:").trim()
-            mpu6050_z.text = value
-        }
-        if (message.startsWith("speed:")) {
-            val value = message.substringAfter("speed:").trim()
-            speed.text = value
-        }
-        // Toast 메시지로 블루투스 신호 표시
-        Toast.makeText(this, "Received: $message", Toast.LENGTH_SHORT).show()
-        Log.d(TAG,"$message")
-    }
+
+
     override fun onDestroy() {
         super.onDestroy()
-        connectedThread?.cancel()
+        bluetoothGatt?.close()
+        bluetoothGatt = null
     }
 }
