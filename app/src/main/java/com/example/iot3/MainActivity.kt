@@ -1,6 +1,7 @@
 package com.example.iot3
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -8,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -32,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mpu6050_y: TextView
     private lateinit var mpu6050_z: TextView
     private lateinit var connectButton: Button
+    private lateinit var img_BH1750: ImageView
 
     companion object {
         const val MESSAGE_READ = 0
@@ -47,6 +50,7 @@ class MainActivity : AppCompatActivity() {
         mpu6050_y = findViewById(R.id.mpu6050_y)
         mpu6050_z = findViewById(R.id.mpu6050_z)
         connectButton = findViewById(R.id.connectbutton)
+        img_BH1750 = findViewById(R.id.img_BH1750)
 
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
         if (bluetoothAdapter == null) {
@@ -127,6 +131,7 @@ class MainActivity : AppCompatActivity() {
         bluetoothGatt?.disconnect()
     }
 
+    @SuppressLint("SetTextI18n")
     private fun processBluetoothMessage(message: String) {
         val parts = message.split(" ") // 문자열을 공백을 기준으로 분할하여 부분으로 나눔
 
@@ -137,11 +142,14 @@ class MainActivity : AppCompatActivity() {
                 val value = keyValue[1]
 
                 when (key) {
-                    "speed" -> speed.text = value
+                    "speed" -> speed.text = value + "km/h"
                     "bright" -> bright.text = value
-                    "ax" -> mpu6050_x.text = value
-                    "ay" -> mpu6050_y.text = value
-                    "az" -> mpu6050_z.text = value
+                    //if (value > "50") {
+                    //    img_BH1750.src =
+                    //}
+                    "ax" -> mpu6050_x.text = "x :$value"
+                    "ay" -> mpu6050_y.text = "y :$value"
+                    "az" -> mpu6050_z.text = "z :$value"
                     // 다른 키에 대한 처리를 여기에 추가할 수 있음
                 }
             }
