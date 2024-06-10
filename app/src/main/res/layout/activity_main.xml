@@ -143,11 +143,5 @@
             android:textSize="50sp" />
     </LinearLayout>
 
-    <com.google.android.gms.maps.MapView
-        android:id="@+id/mapView"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:layout_weight="1" />
-
 
 </LinearLayout>
