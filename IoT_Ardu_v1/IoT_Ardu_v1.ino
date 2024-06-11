@@ -1,15 +1,14 @@
 #include <Wire.h>
 #include <MPU9250.h>
 #include <SoftwareSerial.h>
-#include <TinyGPSPlus.h>
 #include <BH1750.h>
 #include <Adafruit_NeoPixel.h>
 
 #define HM10_RX_PIN 2
 #define HM10_TX_PIN 3
-#define GPS_RX_PIN A2
-#define GPS_TX_PIN A3
-#define SENSOR_PIN A0
+//#define GPS_RX_PIN 9
+//#define GPS_TX_PIN 10
+#define SENSOR_PIN A1
 #define LED_PIN 6
 
 #define LED_COUNT 32   // 네오픽셀 LED 개수
@@ -18,11 +17,10 @@
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
 SoftwareSerial hm10Serial(HM10_RX_PIN, HM10_TX_PIN);
-SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
-TinyGPSPlus gps;
+SoftwareSerial gpsSerial(9, 10);
 MPU9250 mpu;
 
-int16_t threshold = 900;
+int16_t threshold = 700;
 const int DARK_THRESHOLD = 300;
 
 void setup() {
@@ -55,34 +53,27 @@ void setup() {
 void loop() {
   String dataString = "";
 
-  // GPS 데이터 수신 및 출력
-  while (gpsSerial.available() > 0) {
-    char c = gpsSerial.read();
-    Serial.print(c);  // 수신된 GPS 데이터를 시리얼 모니터에 출력
-
-    if (gps.encode(c)) {
-      if (gps.location.isValid()) {
-        Serial.print("위도: ");
-        Serial.print(gps.location.lat(), 6);
-        Serial.print(", 경도: ");
-        Serial.println(gps.location.lng(), 6);
-      } else {
-        Serial.println("위치 정보를 수신 중...");
-      }
+  // GPS
+  if (gpsSerial.available()) {
+    String gpsData = gpsSerial.readStringUntil('\n');
+    if (gpsData.startsWith("$GPVTG")) {
+      dataString += "speed:";
+      dataString += parseGPVTG(gpsData);
+      dataString += " ";
     }
   }
 
   // 가속도 데이터 수신 및 충격 감지
   mpu.update();
-  float ax = mpu.getAccX() * 1000;
-  float ay = mpu.getAccY() * 1000;
-  float az = mpu.getAccZ() * 1000;
+  float ax = (mpu.getAccX() * 1000) + 200;
+  float ay = (mpu.getAccY() * 1000) + 120;
+  float az = (mpu.getAccZ() * 1000) - 900;
   Serial.print("ax = "); Serial.print(ax);
   Serial.print(" | ay = "); Serial.print(ay);
   Serial.print(" | az = "); Serial.println(az);
-  dataString += "ax:"; dataString += String(ax); dataString += " ";
-  dataString += "ay:"; dataString += String(ay); dataString += " ";
-  dataString += "az:"; dataString += String(az); dataString += " ";
+  dataString += "ax:"; dataString += ax; dataString += " ";
+  dataString += "ay:"; dataString += ay; dataString += " ";
+  dataString += "az:"; dataString += az; dataString += " ";
 
   if (abs(ax) > threshold || abs(ay) > threshold || abs(az) > threshold) {
     Serial.println("충격이 감지되었습니다!");
@@ -94,7 +85,7 @@ void loop() {
 
   // 조도 센서 데이터 수신 및 LED 제어
   int lightValue = analogRead(SENSOR_PIN);
-  dataString += "bright:"; dataString += String(lightValue); dataString += " ";
+  dataString += "bright:"; dataString += lightValue; dataString += " ";
   if (lightValue > DARK_THRESHOLD) {
     strip.setBrightness(BRIGHTNESS);  // 네오픽셀 밝기 설정 *RGBW만
     for (int i = 0; i < LED_COUNT; i++) {
@@ -112,6 +103,7 @@ void loop() {
     Serial.println("밝아서 LED를 끕니다.");
     dataString += "light:0"; dataString += " ";
   }
+
   // 데이터를 블루투스 시리얼 포트로 전송
   hm10Serial.println(dataString);
 
@@ -120,3 +112,32 @@ void loop() {
 
   delay(1000);
 }
+
+
+String parseGPVTG(String data) {
+  int comma1 = data.indexOf(',');
+  int comma2 = data.indexOf(',', comma1 + 1);
+  int comma3 = data.indexOf(',', comma2 + 1);
+  int comma4 = data.indexOf(',', comma3 + 1);
+  int comma5 = data.indexOf(',', comma4 + 1);
+  int comma6 = data.indexOf(',', comma5 + 1);
+  int comma7 = data.indexOf(',', comma6 + 1);
+
+  // Extract and trim the speed in Knots
+  String speedKnots = data.substring(comma5 + 1, comma6);
+  speedKnots.trim();  // Remove any leading or trailing whitespace
+
+  // Check if speedKnots is a valid number
+  if (speedKnots.length() > 0 && isDigit(speedKnots.charAt(0))) {
+    // Convert speedKnots to float and calculate speed in km/h
+    float speedKnotsFloat = speedKnots.toFloat();
+    float speedKmh = speedKnotsFloat * 1.852;
+
+    // Return speed in km/h as a string
+    return String(speedKmh, 3);  // Convert to string with 3 decimal places
+  } else {
+    return "N/A";
+  }
+}
+
+
