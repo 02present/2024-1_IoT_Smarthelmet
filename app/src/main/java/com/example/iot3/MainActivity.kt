@@ -178,12 +178,17 @@ class MainActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     when (key) {
-                        //"speed" -> speed.text = "$value km/h"
+                        "speed" -> speed.text = "$value km/h"
                         "bright" -> bright.text = value
                         "ax" -> mpu6050_x.text = "x: $value"
                         "ay" -> mpu6050_y.text = "y: $value"
                         "az" -> mpu6050_z.text = "z: $value"
-                        "warning:1" -> tv_warning.text = "넘어짐 감지됨!!"
+                        "warning" -> {
+                            when (value) {
+                                "1" -> tv_warning.text = "넘어짐 감지됨!!"
+                            }
+                        }
+
                         "light" -> {
                             when (value) {
                                 "0" -> img_BH1750.setImageResource(R.drawable.bright_off)
